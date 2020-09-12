@@ -783,7 +783,7 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		conditions = append(conditions, "rent = ?")
+		conditions = append(conditions, "rent_range = ?")
 		params = append(params, estateRent.ID)
 	}
 
