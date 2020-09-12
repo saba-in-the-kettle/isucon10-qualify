@@ -368,7 +368,8 @@ func postChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
-	values := &bytes.Buffer{}
+	query := &bytes.Buffer{}
+	values := make([]interface{}, 0, len(records)*13)
 	for _, row := range records {
 		//fmt.Println(row)
 		rm := RecordMapper{Record: row}
@@ -389,10 +390,11 @@ func postChair(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(values, fmt.Sprintf("(%d, %s, %s, %s, %d, %d, %d, %d, %s, %s, %s, %d, %d),", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock))
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
 	}
-	valueStr := values.String()
-	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES " + valueStr[:len(valueStr)-1]); err != nil {
+	valueStr := query.String()
+	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert chair: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -669,7 +671,8 @@ func postEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
-	values := &bytes.Buffer{}
+	query := &bytes.Buffer{}
+	values := make([]interface{}, 0, len(records)*12)
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
@@ -688,11 +691,12 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(values, fmt.Sprintf("(%d, %s, %s, %s, %s, %f, %f, %d, %d, %d, %s, %d),", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity))
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
 
 	}
-	valueStr := values.String()
-	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES " + valueStr[:len(valueStr)-1]); err != nil {
+	valueStr := query.String()
+	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert estate: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}

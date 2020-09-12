@@ -31,7 +31,7 @@ deploy:
 
 .PHONY: pprof
 pprof:
-	go tool pprof -http=":8081" -seconds=10 http://$(SERVER_URL)/debug/pprof/profile
+	go tool pprof -http=":8081" -seconds=20 http://$(SERVER_URL)/debug/pprof/profile
 
 .PHONY: pre-bench
 pre-bench:
