@@ -371,12 +371,11 @@ func initialize(c echo.Context) error {
 	go func() {
 		for _, p := range paths {
 			sqlFile, _ := filepath.Abs(p)
-			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v < %v",
 				mySQLConnectionData.Host,
 				mySQLConnectionData.User,
 				mySQLConnectionData.Password,
 				mySQLConnectionData.Port,
-				mySQLConnectionData.DBName,
 				sqlFile,
 			)
 			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
@@ -389,12 +388,11 @@ func initialize(c echo.Context) error {
 	go func() {
 		for _, p := range paths {
 			sqlFile, _ := filepath.Abs(p)
-			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v  < %v",
 				"10.161.78.103",
 				"isucon",
 				"isucon",
 				3306,
-				"isuumo",
 				sqlFile,
 			)
 			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
