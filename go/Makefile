@@ -42,7 +42,7 @@ pre-bench:
 
 .PHONY: alp
 alp:
-	ssh $(SERVER1) "alp -r --aggregates="/api/chair/\d+","/api/chair/buy/\d+","/api/estate/\d+","/api/estate/req_doc/\d+","/api/recommended_estate/\d+" -q -f $(NGINX_ACCESS_LOG_PATH)"
+	ssh $(SERVER1) 'alp -r --aggregates="/api/chair/\d+","/api/chair/buy/\d+","/api/estate/\d+","/api/estate/req_doc/\d+","/api/recommended_estate/\d+" -q --avg -f $(NGINX_ACCESS_LOG_PATH)'
 
 .PHONY: slow
 slow:
