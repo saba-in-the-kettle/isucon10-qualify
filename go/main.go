@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
 
@@ -337,17 +338,23 @@ func main() {
 	mySQLConnectionData = NewMySQLConnectionEnv()
 
 	var err error
-	dbChair, err = mySQLConnectionData.ConnectDB()
-	if err != nil {
-		e.Logger.Fatalf("DB connection failed : %v", err)
+	for {
+		dbChair, err = mySQLConnectionData.ConnectDB()
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
 	}
 	dbChair.SetMaxOpenConns(32)
 	dbChair.SetMaxIdleConns(32)
 	defer dbChair.Close()
 
-	dbEstate, err = mySQLConnectionData.ConnectDBEstate()
-	if err != nil {
-		e.Logger.Fatalf("DB connection failed : %v", err)
+	for {
+		dbEstate, err = mySQLConnectionData.ConnectDBEstate()
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
 	}
 	dbEstate.SetMaxOpenConns(32)
 	dbEstate.SetMaxIdleConns(32)
@@ -669,8 +676,8 @@ func getChairSearchCondition(c echo.Context) error {
 
 func getLowPricedChair(c echo.Context) error {
 	var chairs []Chair
-	query := `SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
-	err := dbChair.Select(&chairs, query, Limit)
+	query := `SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair  WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
+	err := dbChair.Select(&chairs, query, Limit) // ここが遅い
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Logger().Error("getLowPricedChair not found")
@@ -1002,7 +1009,7 @@ func searchEstateNazotte(c echo.Context) error {
 
 		point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
 		query := fmt.Sprintf(`SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
-		err = dbEstate.Get(&validatedEstate, query, estate.ID)
+		err = dbEstate.Get(&validatedEstate, query, estate.ID) // ここが遅い
 		if err != nil {
 			if err == sql.ErrNoRows {
 				continue
