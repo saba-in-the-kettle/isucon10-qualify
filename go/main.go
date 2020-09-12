@@ -153,6 +153,54 @@ type RecordMapper struct {
 	err    error
 }
 
+func getSizeId(size int) int {
+	if size < 80 {
+		return 0
+	}
+	if size < 110 {
+		return 1
+	}
+	if size < 150 {
+		return 2
+	}
+	return 3
+}
+
+func getChairPriceId(price int) int {
+	if price < 3000 {
+		return 0
+	}
+	if price < 6000 {
+		return 1
+	}
+
+	if price < 9000 {
+		return 2
+	}
+
+	if price < 12000 {
+		return 3
+	}
+
+	if price < 15000 {
+		return 4
+	}
+	return 5
+}
+
+func getRentPriceId(price int) int {
+	if price < 50000 {
+		return 0
+	}
+	if price < 100000 {
+		return 1
+	}
+	if price < 150000 {
+		return 2
+	}
+	return 3
+}
+
 func (r *RecordMapper) next() (string, error) {
 	if r.err != nil {
 		return "", r.err
@@ -301,6 +349,7 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "0_Schema.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
+		filepath.Join(sqlDir, "3_AddRange.sql"),
 	}
 
 	for _, p := range paths {
@@ -391,15 +440,19 @@ func postChair(c echo.Context) error {
 		kind := rm.NextString()
 		popularity := rm.NextInt()
 		stock := rm.NextInt()
+		heightRange := getSizeId(height)
+		widthRange := getSizeId(width)
+		depthRange := getSizeId(depth)
+		priceRange := getChairPriceId(price)
 		if err := rm.Err(); err != nil {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
-		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock, heightRange, widthRange, depthRange, priceRange)
 	}
 	valueStr := query.String()
-	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock, height_range, width_range, depth_range, price_range) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert chair: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -413,33 +466,17 @@ func postChair(c echo.Context) error {
 func searchChairs(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
-	const chairMin int64 = 0      // w, h, d の最小値は 30 だった
-	const chairMax int64 = 1000   // w, h, d の最大値は 200 だった
-	const minPrice int64 = 0      // 実際の最低価格は 1,000
-	const maxPrice int64 = 100000 // 実際の最低価格は 20,000
 
-	var priceMin = minPrice
-	var priceMax = maxPrice
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-
-		if chairPrice.Min != -1 {
-			priceMin = chairPrice.Min
-		}
-		if chairPrice.Max != -1 {
-			priceMax = chairPrice.Max - 1
-		}
+		conditions = append(conditions, "price_range = ?")
+		params = append(params, chairPrice.ID)
 	}
-	conditions = append(conditions, "price BETWEEN ? AND ?")
-	params = append(params, priceMin)
-	params = append(params, priceMax)
 
-	var heightMin = chairMin
-	var heightMax = chairMax
 	if c.QueryParam("heightRangeId") != "" {
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
@@ -447,19 +484,10 @@ func searchChairs(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if chairHeight.Min != -1 {
-			heightMin = chairHeight.Min
-		}
-		if chairHeight.Max != -1 {
-			heightMax = chairHeight.Max - 1 // height < を between に書き換えているため -1 している
-		}
+		conditions = append(conditions, "height_range = ?")
+		params = append(params, chairHeight.ID)
 	}
-	conditions = append(conditions, "height BETWEEN ? AND ?")
-	params = append(params, heightMin)
-	params = append(params, heightMax)
 
-	var widthMin = chairMin
-	var widthMax = chairMax
 	if c.QueryParam("widthRangeId") != "" {
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
@@ -467,36 +495,19 @@ func searchChairs(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if chairWidth.Min != -1 {
-			widthMin = chairWidth.Min
-		}
-		if chairWidth.Max != -1 {
-			widthMax = chairWidth.Max - 1
-		}
+		conditions = append(conditions, "width_range = ?")
+		params = append(params, chairWidth.ID)
 	}
-	conditions = append(conditions, "width BETWEEN ? AND ?")
-	params = append(params, widthMin)
-	params = append(params, widthMax)
 
-	var depthMin = chairMin
-	var depthMax = chairMax
 	if c.QueryParam("depthRangeId") != "" {
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-
-		if chairDepth.Min != -1 {
-			depthMin = chairDepth.Min
-		}
-		if chairDepth.Max != -1 {
-			depthMax = chairDepth.Max - 1
-		}
+		conditions = append(conditions, "depth_range = ?")
+		params = append(params, chairDepth.ID)
 	}
-	conditions = append(conditions, "depth BETWEEN ? AND ?")
-	params = append(params, depthMin)
-	params = append(params, depthMax)
 
 	if c.QueryParam("kind") != "" {
 		conditions = append(conditions, "kind = ?")
@@ -534,7 +545,7 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair FORCE INDEX (search_chair) WHERE "
+	searchQuery := "SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair WHERE "
 	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
@@ -708,16 +719,19 @@ func postEstate(c echo.Context) error {
 		doorWidth := rm.NextInt()
 		features := rm.NextString()
 		popularity := rm.NextInt()
+		doorWidthRange := getSizeId(doorWidth)
+		doorHeightRange := getSizeId(doorHeight)
+		rentRange := getRentPriceId(rent)
 		if err := rm.Err(); err != nil {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
-		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, doorWidthRange, doorHeightRange, rentRange)
 
 	}
 	valueStr := query.String()
-	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity, door_width_range, door_height_range, rent_range) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert estate: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -747,21 +761,8 @@ func searchEstates(c echo.Context) error {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-
-		if doorHeight.Min != -1 {
-			conditions = append(conditions, "door_height >= ?")
-			params = append(params, doorHeight.Min)
-		} else {
-			conditions = append(conditions, "door_height >= ?")
-			params = append(params, 0)
-		}
-		if doorHeight.Max != -1 {
-			conditions = append(conditions, "door_height < ?")
-			params = append(params, doorHeight.Max)
-		} else {
-			conditions = append(conditions, "door_height < ?")
-			params = append(params, 200)
-		}
+		conditions = append(conditions, "door_height_range = ?")
+		params = append(params, doorHeight.ID)
 	}
 
 	if c.QueryParam("doorWidthRangeId") != "" {
@@ -771,20 +772,8 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if doorWidth.Min != -1 {
-			conditions = append(conditions, "door_width >= ?")
-			params = append(params, doorWidth.Min)
-		} else {
-			conditions = append(conditions, "door_width >= ?")
-			params = append(params, 0)
-		}
-		if doorWidth.Max != -1 {
-			conditions = append(conditions, "door_width < ?")
-			params = append(params, doorWidth.Max)
-		} else {
-			conditions = append(conditions, "door_width < ?")
-			params = append(params, 200)
-		}
+		conditions = append(conditions, "door_width_range = ?")
+		params = append(params, doorWidth.ID)
 	}
 
 	if c.QueryParam("rentRangeId") != "" {
@@ -794,20 +783,8 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if estateRent.Min != -1 {
-			conditions = append(conditions, "rent >= ?")
-			params = append(params, estateRent.Min)
-		} else {
-			conditions = append(conditions, "rent >= ?")
-			params = append(params, 0)
-		}
-		if estateRent.Max != -1 {
-			conditions = append(conditions, "rent < ?")
-			params = append(params, estateRent.Max)
-		} else {
-			conditions = append(conditions, "rent < ?")
-			params = append(params, 200000)
-		}
+		conditions = append(conditions, "rent_range = ?")
+		params = append(params, estateRent.ID)
 	}
 
 	if c.QueryParam("features") != "" {
