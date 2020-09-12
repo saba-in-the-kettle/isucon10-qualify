@@ -416,10 +416,10 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairPrice.Min != -1 {
-			priceMin=chairPrice.Min
+			priceMin = chairPrice.Min
 		}
 		if chairPrice.Max != -1 {
-			priceMax= chairPrice.Max -1
+			priceMax = chairPrice.Max - 1
 		}
 	}
 	conditions = append(conditions, "price BETWEEN ? AND ?")
@@ -446,6 +446,8 @@ func searchChairs(c echo.Context) error {
 	params = append(params, heightMin)
 	params = append(params, heightMax)
 
+	var widthMin = chairMin
+	var widthMax = chairMax
 	if c.QueryParam("widthRangeId") != "" {
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
@@ -454,15 +456,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairWidth.Min != -1 {
-			conditions = append(conditions, "width >= ?")
-			params = append(params, chairWidth.Min)
+			widthMin = chairWidth.Min
 		}
 		if chairWidth.Max != -1 {
-			conditions = append(conditions, "width < ?")
-			params = append(params, chairWidth.Max)
+			widthMax = chairWidth.Max - 1
 		}
 	}
+	conditions = append(conditions, "width BETWEEN ? AND ?")
+	params = append(params, widthMin)
+	params = append(params, widthMax)
 
+	var depthMin = chairMin
+	var depthMax = chairMax
 	if c.QueryParam("depthRangeId") != "" {
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
@@ -471,14 +476,15 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairDepth.Min != -1 {
-			conditions = append(conditions, "depth >= ?")
-			params = append(params, chairDepth.Min)
+			depthMin = chairDepth.Min
 		}
 		if chairDepth.Max != -1 {
-			conditions = append(conditions, "depth < ?")
-			params = append(params, chairDepth.Max)
+			depthMax = chairDepth.Max - 1
 		}
 	}
+	conditions = append(conditions, "depth BETWEEN ? AND ?")
+	params = append(params, depthMin)
+	params = append(params, depthMax)
 
 	if c.QueryParam("kind") != "" {
 		conditions = append(conditions, "kind = ?")
@@ -516,7 +522,7 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT * FROM chair WHERE "
+	searchQuery := "SELECT * FROM chair FORCE INDEX (search_chair) WHERE "
 	countQuery := "SELECT COUNT(*) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
