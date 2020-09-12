@@ -802,21 +802,8 @@ func searchEstates(c echo.Context) error {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-
-		if doorHeight.Min != -1 {
-			conditions = append(conditions, "door_height >= ?")
-			params = append(params, doorHeight.Min)
-		} else {
-			conditions = append(conditions, "door_height >= ?")
-			params = append(params, 0)
-		}
-		if doorHeight.Max != -1 {
-			conditions = append(conditions, "door_height < ?")
-			params = append(params, doorHeight.Max)
-		} else {
-			conditions = append(conditions, "door_height < ?")
-			params = append(params, 200)
-		}
+		conditions = append(conditions, "door_height_range = ?")
+		params = append(params, doorHeight.ID)
 	}
 
 	if c.QueryParam("doorWidthRangeId") != "" {
@@ -826,20 +813,8 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if doorWidth.Min != -1 {
-			conditions = append(conditions, "door_width >= ?")
-			params = append(params, doorWidth.Min)
-		} else {
-			conditions = append(conditions, "door_width >= ?")
-			params = append(params, 0)
-		}
-		if doorWidth.Max != -1 {
-			conditions = append(conditions, "door_width < ?")
-			params = append(params, doorWidth.Max)
-		} else {
-			conditions = append(conditions, "door_width < ?")
-			params = append(params, 200)
-		}
+		conditions = append(conditions, "door_width_range = ?")
+		params = append(params, doorWidth.ID)
 	}
 
 	if c.QueryParam("rentRangeId") != "" {
@@ -849,20 +824,8 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if estateRent.Min != -1 {
-			conditions = append(conditions, "rent >= ?")
-			params = append(params, estateRent.Min)
-		} else {
-			conditions = append(conditions, "rent >= ?")
-			params = append(params, 0)
-		}
-		if estateRent.Max != -1 {
-			conditions = append(conditions, "rent < ?")
-			params = append(params, estateRent.Max)
-		} else {
-			conditions = append(conditions, "rent < ?")
-			params = append(params, 200000)
-		}
+		conditions = append(conditions, "rent = ?")
+		params = append(params, estateRent.ID)
 	}
 
 	if c.QueryParam("features") != "" {
