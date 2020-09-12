@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/goccy/go-json"
 
 	_ "net/http/pprof"
 
@@ -538,8 +539,8 @@ func searchChairs(c echo.Context) error {
 	}
 
 	res.Chairs = chairs
-
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func buyChair(c echo.Context) error {
@@ -812,7 +813,8 @@ func searchEstates(c echo.Context) error {
 
 	res.Estates = estates
 
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func getLowPricedEstate(c echo.Context) error {
@@ -828,7 +830,8 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+	b, _ := json.Marshal(EstateListResponse{Estates: estates})
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
