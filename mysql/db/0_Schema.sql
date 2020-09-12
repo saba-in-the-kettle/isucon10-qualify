@@ -61,15 +61,3 @@ CREATE INDEX search_chair_width ON chair (width_range);
 CREATE INDEX search_chair_depth ON chair (depth_range);
 CREATE INDEX search_chair_color ON chair (color);
 CREATE INDEX search_chair_kind ON chair (kind);
-
-ALTER TABLE estate ADD rent_range SMALLINT DEFAULT 0;
-ALTER TABLE estate ADD door_height_range SMALLINT DEFAULT 0;
-ALTER TABLE estate ADD door_width_range SMALLINT DEFAULT 0;
-
-ALTER TABLE estate ADD INDEX idx_estate_rent (rent);
-ALTER TABLE estate ADD INDEX idx_estate_d_h (door_height);
-ALTER TABLE estate ADD INDEX idx_estate_d_w (door_width);
-
-CREATE INDEX search_estate_rent ON estate (rent_range);
-CREATE INDEX search_estate_d_h ON estate (door_height_range);
-CREATE INDEX search_estate_d_w ON estate (door_width_range);
