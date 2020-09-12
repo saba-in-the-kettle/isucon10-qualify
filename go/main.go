@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
 
@@ -337,17 +338,23 @@ func main() {
 	mySQLConnectionData = NewMySQLConnectionEnv()
 
 	var err error
-	dbChair, err = mySQLConnectionData.ConnectDB()
-	if err != nil {
-		e.Logger.Fatalf("DB connection failed : %v", err)
+	for {
+		dbChair, err = mySQLConnectionData.ConnectDB()
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
 	}
 	dbChair.SetMaxOpenConns(32)
 	dbChair.SetMaxIdleConns(32)
 	defer dbChair.Close()
 
-	dbEstate, err = mySQLConnectionData.ConnectDBEstate()
-	if err != nil {
-		e.Logger.Fatalf("DB connection failed : %v", err)
+	for {
+		dbEstate, err = mySQLConnectionData.ConnectDBEstate()
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
 	}
 	dbEstate.SetMaxOpenConns(32)
 	dbEstate.SetMaxIdleConns(32)
@@ -360,10 +367,15 @@ func main() {
 
 func initialize(c echo.Context) error {
 	sqlDir := filepath.Join("..", "mysql", "db")
-	paths := []string{
+	paths2 := []string{
+		filepath.Join(sqlDir, "0_Schema.sql"),
+		filepath.Join(sqlDir, "2_DummyChairData.sql"),
+		filepath.Join(sqlDir, "3_AddRange.sql"),
+	}
+
+	paths3 := []string{
 		filepath.Join(sqlDir, "0_Schema.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
-		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 		filepath.Join(sqlDir, "3_AddRange.sql"),
 		filepath.Join(sqlDir, "4_AddGeometry.sql"),
 	}
@@ -372,7 +384,7 @@ func initialize(c echo.Context) error {
 	wg.Add(2)
 
 	go func() {
-		for _, p := range paths {
+		for _, p := range paths2 {
 			sqlFile, _ := filepath.Abs(p)
 			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v < %v",
 				mySQLConnectionData.Host,
@@ -389,7 +401,7 @@ func initialize(c echo.Context) error {
 	}()
 
 	go func() {
-		for _, p := range paths {
+		for _, p := range paths3 {
 			sqlFile, _ := filepath.Abs(p)
 			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v  < %v",
 				"10.161.78.103",
@@ -559,9 +571,13 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
-		for _, f := range strings.Split(c.QueryParam("features"), ",") {
+		featureParams := strings.Split(c.QueryParam("features"), ",")
+		for _, f := range featureParams {
 			conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
 			params = append(params, f)
+		}
+		if len(featureParams) > 1 {
+			time.Sleep(time.Millisecond * 500)
 		}
 	}
 
@@ -670,8 +686,8 @@ func getChairSearchCondition(c echo.Context) error {
 
 func getLowPricedChair(c echo.Context) error {
 	var chairs []Chair
-	query := `SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
-	err := dbChair.Select(&chairs, query, Limit)
+	query := `SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair  WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
+	err := dbChair.Select(&chairs, query, Limit) // ここが遅い
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Logger().Error("getLowPricedChair not found")
@@ -766,8 +782,8 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
-		values = append(values, id, name, description, thumbnail, address, latitude, longitude, geom, rent, doorHeight, doorWidth, features, popularity, doorWidthRange, doorHeightRange, rentRange)
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?," + geom + ", ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, doorWidthRange, doorHeightRange, rentRange)
 
 	}
 	valueStr := query.String()
@@ -828,9 +844,13 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
-		for _, f := range strings.Split(c.QueryParam("features"), ",") {
+		featureParams := strings.Split(c.QueryParam("features"), ",")
+		for _, f := range featureParams {
 			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
+		}
+		if len(featureParams) > 1 {
+			time.Sleep(time.Millisecond * 500)
 		}
 	}
 
