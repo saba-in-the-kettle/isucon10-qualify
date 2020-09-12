@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-json"
 
@@ -333,7 +334,8 @@ func main() {
 	if err != nil {
 		e.Logger.Fatalf("DB connection failed : %v", err)
 	}
-	db.SetMaxOpenConns(256)
+	db.SetMaxOpenConns(32)
+	db.SetMaxIdleConns(32)
 	defer db.Close()
 
 	// Start server
@@ -347,7 +349,6 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "0_Schema.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
-		filepath.Join(sqlDir, "3_AddRange.sql"),
 	}
 
 	for _, p := range paths {
@@ -464,17 +465,33 @@ func postChair(c echo.Context) error {
 func searchChairs(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+	const chairMin int64 = 0      // w, h, d の最小値は 30 だった
+	const chairMax int64 = 1000   // w, h, d の最大値は 200 だった
+	const minPrice int64 = 0      // 実際の最低価格は 1,000
+	const maxPrice int64 = 100000 // 実際の最低価格は 20,000
 
+	var priceMin = minPrice
+	var priceMax = maxPrice
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		conditions = append(conditions, "price_range = ?")
-		params = append(params, chairPrice.ID)
-	}
 
+		if chairPrice.Min != -1 {
+			priceMin = chairPrice.Min
+		}
+		if chairPrice.Max != -1 {
+			priceMax = chairPrice.Max - 1
+		}
+	}
+	conditions = append(conditions, "price BETWEEN ? AND ?")
+	params = append(params, priceMin)
+	params = append(params, priceMax)
+
+	var heightMin = chairMin
+	var heightMax = chairMax
 	if c.QueryParam("heightRangeId") != "" {
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
@@ -482,10 +499,19 @@ func searchChairs(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		conditions = append(conditions, "height_range = ?")
-		params = append(params, chairHeight.ID)
+		if chairHeight.Min != -1 {
+			heightMin = chairHeight.Min
+		}
+		if chairHeight.Max != -1 {
+			heightMax = chairHeight.Max - 1 // height < を between に書き換えているため -1 している
+		}
 	}
+	conditions = append(conditions, "height BETWEEN ? AND ?")
+	params = append(params, heightMin)
+	params = append(params, heightMax)
 
+	var widthMin = chairMin
+	var widthMax = chairMax
 	if c.QueryParam("widthRangeId") != "" {
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
@@ -493,19 +519,36 @@ func searchChairs(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		conditions = append(conditions, "width_range = ?")
-		params = append(params, chairWidth.ID)
+		if chairWidth.Min != -1 {
+			widthMin = chairWidth.Min
+		}
+		if chairWidth.Max != -1 {
+			widthMax = chairWidth.Max - 1
+		}
 	}
+	conditions = append(conditions, "width BETWEEN ? AND ?")
+	params = append(params, widthMin)
+	params = append(params, widthMax)
 
+	var depthMin = chairMin
+	var depthMax = chairMax
 	if c.QueryParam("depthRangeId") != "" {
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		conditions = append(conditions, "depth_range = ?")
-		params = append(params, chairDepth.ID)
+
+		if chairDepth.Min != -1 {
+			depthMin = chairDepth.Min
+		}
+		if chairDepth.Max != -1 {
+			depthMax = chairDepth.Max - 1
+		}
 	}
+	conditions = append(conditions, "depth BETWEEN ? AND ?")
+	params = append(params, depthMin)
+	params = append(params, depthMax)
 
 	if c.QueryParam("kind") != "" {
 		conditions = append(conditions, "kind = ?")
@@ -543,7 +586,7 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair WHERE "
+	searchQuery := "SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair FORCE INDEX (search_chair) WHERE "
 	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
@@ -737,6 +780,15 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+
+	recoMap.mu.Lock()
+	defer recoMap.mu.Unlock()
+	recoMap.rm = map[int][]Estate{}
+
+	lpMap.mu.Lock()
+	defer lpMap.mu.Unlock()
+	lpMap.lp = nil
+
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -750,8 +802,21 @@ func searchEstates(c echo.Context) error {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		conditions = append(conditions, "door_height_range = ?")
-		params = append(params, doorHeight.ID)
+
+		if doorHeight.Min != -1 {
+			conditions = append(conditions, "door_height >= ?")
+			params = append(params, doorHeight.Min)
+		} else {
+			conditions = append(conditions, "door_height >= ?")
+			params = append(params, 0)
+		}
+		if doorHeight.Max != -1 {
+			conditions = append(conditions, "door_height < ?")
+			params = append(params, doorHeight.Max)
+		} else {
+			conditions = append(conditions, "door_height < ?")
+			params = append(params, 200)
+		}
 	}
 
 	if c.QueryParam("doorWidthRangeId") != "" {
@@ -761,8 +826,20 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		conditions = append(conditions, "door_width_range = ?")
-		params = append(params, doorWidth.ID)
+		if doorWidth.Min != -1 {
+			conditions = append(conditions, "door_width >= ?")
+			params = append(params, doorWidth.Min)
+		} else {
+			conditions = append(conditions, "door_width >= ?")
+			params = append(params, 0)
+		}
+		if doorWidth.Max != -1 {
+			conditions = append(conditions, "door_width < ?")
+			params = append(params, doorWidth.Max)
+		} else {
+			conditions = append(conditions, "door_width < ?")
+			params = append(params, 200)
+		}
 	}
 
 	if c.QueryParam("rentRangeId") != "" {
@@ -772,8 +849,20 @@ func searchEstates(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		conditions = append(conditions, "rent = ?")
-		params = append(params, estateRent.ID)
+		if estateRent.Min != -1 {
+			conditions = append(conditions, "rent >= ?")
+			params = append(params, estateRent.Min)
+		} else {
+			conditions = append(conditions, "rent >= ?")
+			params = append(params, 0)
+		}
+		if estateRent.Max != -1 {
+			conditions = append(conditions, "rent < ?")
+			params = append(params, estateRent.Max)
+		} else {
+			conditions = append(conditions, "rent < ?")
+			params = append(params, 200000)
+		}
 	}
 
 	if c.QueryParam("features") != "" {
@@ -829,7 +918,24 @@ func searchEstates(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, b)
 }
 
+var lpMap = struct {
+	lp []Estate
+	mu sync.RWMutex
+}{
+	lp: nil,
+	mu: sync.RWMutex{},
+}
+
 func getLowPricedEstate(c echo.Context) error {
+	lpMap.mu.RLock()
+
+	if lpMap.lp != nil {
+		b, _ := json.Marshal(EstateListResponse{Estates: lpMap.lp})
+		lpMap.mu.RUnlock()
+		return c.JSONBlob(http.StatusOK, b)
+	}
+	lpMap.mu.RUnlock()
+
 	estates := make([]Estate, 0, Limit)
 	query := `SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate ORDER BY rent ASC, id ASC LIMIT ?`
 	err := db.Select(&estates, query, Limit)
@@ -842,8 +948,20 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	lpMap.mu.Lock()
+	defer lpMap.mu.Unlock()
+	lpMap.lp = estates
+
 	b, _ := json.Marshal(EstateListResponse{Estates: estates})
 	return c.JSONBlob(http.StatusOK, b)
+}
+
+var recoMap = struct {
+	rm map[int][]Estate
+	mu sync.RWMutex
+}{
+	rm: map[int][]Estate{},
+	mu: sync.RWMutex{},
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
@@ -852,6 +970,14 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 		c.Logger().Infof("Invalid format searchRecommendedEstateWithChair id : %v", err)
 		return c.NoContent(http.StatusBadRequest)
 	}
+
+	recoMap.mu.RLock()
+
+	if value, ok := recoMap.rm[id]; ok {
+		recoMap.mu.RUnlock()
+		return c.JSON(http.StatusOK, EstateListResponse{Estates: value})
+	}
+	recoMap.mu.RUnlock()
 
 	chair := Chair{}
 	query := `SELECT width,height,depth FROM chair WHERE id = ? LIMIT 1`
@@ -879,6 +1005,10 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	recoMap.mu.Lock()
+	defer recoMap.mu.Unlock()
+
+	recoMap.rm[id] = estates
 	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
 }
 
