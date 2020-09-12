@@ -8,6 +8,7 @@ BUILD_DIR:=./
 BIN_NAME:=isuumo
 SERVER1:=isucon-server-1
 SERVER_BINARY_DIR:=~/isuumo/webapp/go
+SERVER_MYSQL_DIR:=~/isuumo/webapp/mysql
 SERVER_URL:=localhost:1323
 
 SLOW_LOG_PATH:=/tmp/slow.log
@@ -27,6 +28,7 @@ deploy:
 	make build
 	ssh $(SERVER1) "sudo systemctl stop $(SERVICE_NAME)"
 	scp $(BUILD_DIR)$(BIN_NAME) $(SERVER1):$(SERVER_BINARY_DIR)
+	scp -r ../mysql/db $(SERVER1):$(SERVER_MYSQL_DIR)
 	ssh $(SERVER1) "sudo systemctl start $(SERVICE_NAME)"
 
 .PHONY: pprof
@@ -36,7 +38,7 @@ pprof:
 .PHONY: pre-bench
 pre-bench:
 	ssh $(SERVER1) "truncate $(SLOW_LOG_PATH) --size 0"
-	ssh $(SERVER1) "truncate $(NGINX_ACCESS_LOG_PATH) --size 0"
+	ssh $(SERVER1) "sudo truncate $(NGINX_ACCESS_LOG_PATH) --size 0"
 
 .PHONY: alp
 alp:

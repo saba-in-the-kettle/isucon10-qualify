@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/goccy/go-json"
 
 	_ "net/http/pprof"
 
@@ -538,8 +539,8 @@ func searchChairs(c echo.Context) error {
 	}
 
 	res.Chairs = chairs
-
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func buyChair(c echo.Context) error {
@@ -722,10 +723,16 @@ func searchEstates(c echo.Context) error {
 		if doorHeight.Min != -1 {
 			conditions = append(conditions, "door_height >= ?")
 			params = append(params, doorHeight.Min)
+		} else {
+			conditions = append(conditions, "door_height >= ?")
+			params = append(params, 0)
 		}
 		if doorHeight.Max != -1 {
 			conditions = append(conditions, "door_height < ?")
 			params = append(params, doorHeight.Max)
+		} else {
+			conditions = append(conditions, "door_height < ?")
+			params = append(params, 200)
 		}
 	}
 
@@ -739,10 +746,16 @@ func searchEstates(c echo.Context) error {
 		if doorWidth.Min != -1 {
 			conditions = append(conditions, "door_width >= ?")
 			params = append(params, doorWidth.Min)
+		} else {
+			conditions = append(conditions, "door_width >= ?")
+			params = append(params, 0)
 		}
 		if doorWidth.Max != -1 {
 			conditions = append(conditions, "door_width < ?")
 			params = append(params, doorWidth.Max)
+		} else {
+			conditions = append(conditions, "door_width < ?")
+			params = append(params, 200)
 		}
 	}
 
@@ -756,10 +769,16 @@ func searchEstates(c echo.Context) error {
 		if estateRent.Min != -1 {
 			conditions = append(conditions, "rent >= ?")
 			params = append(params, estateRent.Min)
+		} else {
+			conditions = append(conditions, "rent >= ?")
+			params = append(params, 0)
 		}
 		if estateRent.Max != -1 {
 			conditions = append(conditions, "rent < ?")
 			params = append(params, estateRent.Max)
+		} else {
+			conditions = append(conditions, "rent < ?")
+			params = append(params, 200000)
 		}
 	}
 
@@ -812,7 +831,8 @@ func searchEstates(c echo.Context) error {
 
 	res.Estates = estates
 
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func getLowPricedEstate(c echo.Context) error {
@@ -828,7 +848,8 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+	b, _ := json.Marshal(EstateListResponse{Estates: estates})
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
