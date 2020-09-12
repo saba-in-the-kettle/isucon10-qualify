@@ -22,15 +22,3 @@ ALTER TABLE chair DROP INDEX idx_chair_price;
 ALTER TABLE chair DROP INDEX idx_chair_width;
 ALTER TABLE chair DROP INDEX idx_chair_height;
 ALTER TABLE chair DROP INDEX idx_chair_depth;
-
-UPDATE estate SET door_width_range = 1 WHERE door_width >= 80 AND door_width < 110;
-UPDATE estate SET door_width_range = 2 WHERE door_width >= 110 AND door_width < 150;
-UPDATE estate SET door_width_range = 3 WHERE door_width >= 150;
-
-UPDATE estate SET door_height_range = 1 WHERE door_height >= 80 AND door_height < 110;
-UPDATE estate SET door_height_range = 2 WHERE door_height >= 110 AND door_height < 150;
-UPDATE estate SET door_height_range = 3 WHERE door_height >= 150;
-
-UPDATE estate SET rent_range = 1 WHERE rent >= 50000 AND rent < 100000;
-UPDATE estate SET rent_range = 2 WHERE rent >= 100000 AND rent < 150000;
-UPDATE estate SET rent_range = 3 WHERE rent >= 150000;
