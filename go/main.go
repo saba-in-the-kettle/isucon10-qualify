@@ -516,7 +516,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM chair WHERE "
-	countQuery := "SELECT COUNT(*) FROM chair WHERE "
+	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
@@ -789,7 +789,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
-	countQuery := "SELECT COUNT(*) FROM estate WHERE "
+	countQuery := "SELECT COUNT(id) FROM estate WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
