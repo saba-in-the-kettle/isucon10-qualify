@@ -380,7 +380,7 @@ func initialize(c echo.Context) error {
 				sqlFile,
 			)
 			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
-				c.Logger().Panic("Initialize script error : %v", err)
+				c.Logger().Panicf("Initialize script error : %v", err)
 			}
 		}
 		wg.Done()
@@ -398,7 +398,7 @@ func initialize(c echo.Context) error {
 				sqlFile,
 			)
 			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
-				c.Logger().Panic("Initialize script error : %v", err)
+				c.Logger().Panicf("Initialize script error : %v", err)
 			}
 		}
 		wg.Done()
