@@ -401,9 +401,13 @@ func postChair(c echo.Context) error {
 func searchChairs(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
-	const chairMin int64 = 0    // w, h, d の最小値は 30 だった
-	const chairMax int64 = 1000 // w, h, d の最大値は 200 だった
+	const chairMin int64 = 0      // w, h, d の最小値は 30 だった
+	const chairMax int64 = 1000   // w, h, d の最大値は 200 だった
+	const minPrice int64 = 0      // 実際の最低価格は 1,000
+	const maxPrice int64 = 100000 // 実際の最低価格は 20,000
 
+	var priceMin = minPrice
+	var priceMax = maxPrice
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
@@ -412,14 +416,15 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairPrice.Min != -1 {
-			conditions = append(conditions, "price >= ?")
-			params = append(params, chairPrice.Min)
+			priceMin=chairPrice.Min
 		}
 		if chairPrice.Max != -1 {
-			conditions = append(conditions, "price < ?")
-			params = append(params, chairPrice.Max)
+			priceMax= chairPrice.Max -1
 		}
 	}
+	conditions = append(conditions, "price BETWEEN ? AND ?")
+	params = append(params, priceMin)
+	params = append(params, priceMax)
 
 	var heightMin = chairMin
 	var heightMax = chairMax
