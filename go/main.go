@@ -1,10 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -13,12 +14,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/goccy/go-json"
+
+	_ "net/http/pprof"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
-	_ "net/http/pprof"
 )
 
 const Limit = 20
@@ -366,7 +370,10 @@ func postChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
+	query := &bytes.Buffer{}
+	values := make([]interface{}, 0, len(records)*13)
 	for _, row := range records {
+		//fmt.Println(row)
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
 		name := rm.NextString()
@@ -385,11 +392,13 @@ func postChair(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		_, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		if err != nil {
-			c.Logger().Errorf("failed to insert chair: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+	}
+	valueStr := query.String()
+	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+		c.Logger().Errorf("failed to insert chair: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -401,7 +410,13 @@ func postChair(c echo.Context) error {
 func searchChairs(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+	const chairMin int64 = 0      // w, h, d の最小値は 30 だった
+	const chairMax int64 = 1000   // w, h, d の最大値は 200 だった
+	const minPrice int64 = 0      // 実際の最低価格は 1,000
+	const maxPrice int64 = 100000 // 実際の最低価格は 20,000
 
+	var priceMin = minPrice
+	var priceMax = maxPrice
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
@@ -410,15 +425,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairPrice.Min != -1 {
-			conditions = append(conditions, "price >= ?")
-			params = append(params, chairPrice.Min)
+			priceMin = chairPrice.Min
 		}
 		if chairPrice.Max != -1 {
-			conditions = append(conditions, "price < ?")
-			params = append(params, chairPrice.Max)
+			priceMax = chairPrice.Max - 1
 		}
 	}
+	conditions = append(conditions, "price BETWEEN ? AND ?")
+	params = append(params, priceMin)
+	params = append(params, priceMax)
 
+	var heightMin = chairMin
+	var heightMax = chairMax
 	if c.QueryParam("heightRangeId") != "" {
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
@@ -427,15 +445,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairHeight.Min != -1 {
-			conditions = append(conditions, "height >= ?")
-			params = append(params, chairHeight.Min)
+			heightMin = chairHeight.Min
 		}
 		if chairHeight.Max != -1 {
-			conditions = append(conditions, "height < ?")
-			params = append(params, chairHeight.Max)
+			heightMax = chairHeight.Max - 1 // height < を between に書き換えているため -1 している
 		}
 	}
+	conditions = append(conditions, "height BETWEEN ? AND ?")
+	params = append(params, heightMin)
+	params = append(params, heightMax)
 
+	var widthMin = chairMin
+	var widthMax = chairMax
 	if c.QueryParam("widthRangeId") != "" {
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
@@ -444,15 +465,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairWidth.Min != -1 {
-			conditions = append(conditions, "width >= ?")
-			params = append(params, chairWidth.Min)
+			widthMin = chairWidth.Min
 		}
 		if chairWidth.Max != -1 {
-			conditions = append(conditions, "width < ?")
-			params = append(params, chairWidth.Max)
+			widthMax = chairWidth.Max - 1
 		}
 	}
+	conditions = append(conditions, "width BETWEEN ? AND ?")
+	params = append(params, widthMin)
+	params = append(params, widthMax)
 
+	var depthMin = chairMin
+	var depthMax = chairMax
 	if c.QueryParam("depthRangeId") != "" {
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
@@ -461,14 +485,15 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairDepth.Min != -1 {
-			conditions = append(conditions, "depth >= ?")
-			params = append(params, chairDepth.Min)
+			depthMin = chairDepth.Min
 		}
 		if chairDepth.Max != -1 {
-			conditions = append(conditions, "depth < ?")
-			params = append(params, chairDepth.Max)
+			depthMax = chairDepth.Max - 1
 		}
 	}
+	conditions = append(conditions, "depth BETWEEN ? AND ?")
+	params = append(params, depthMin)
+	params = append(params, depthMax)
 
 	if c.QueryParam("kind") != "" {
 		conditions = append(conditions, "kind = ?")
@@ -506,8 +531,8 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT * FROM chair WHERE "
-	countQuery := "SELECT COUNT(*) FROM chair WHERE "
+	searchQuery := "SELECT * FROM chair FORCE INDEX (search_chair) WHERE "
+	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
@@ -530,8 +555,8 @@ func searchChairs(c echo.Context) error {
 	}
 
 	res.Chairs = chairs
-
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func buyChair(c echo.Context) error {
@@ -561,7 +586,7 @@ func buyChair(c echo.Context) error {
 	defer tx.Rollback()
 
 	var chair Chair
-	err = tx.QueryRowx(" * FROM chair WHERE id = ? AND stock > 0 FOR UPDATE", id).StructScan(&chair)
+	err = tx.QueryRowx("SELECT * FROM chair WHERE id = ? AND stock > 0 FOR UPDATE", id).StructScan(&chair)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Echo().Logger.Infof("buyChair chair id \"%v\" not found", id)
@@ -664,6 +689,8 @@ func postEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
+	query := &bytes.Buffer{}
+	values := make([]interface{}, 0, len(records)*12)
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
@@ -682,11 +709,14 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		_, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-		if err != nil {
-			c.Logger().Errorf("failed to insert estate: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+
+	}
+	valueStr := query.String()
+	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+		c.Logger().Errorf("failed to insert estate: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -709,10 +739,16 @@ func searchEstates(c echo.Context) error {
 		if doorHeight.Min != -1 {
 			conditions = append(conditions, "door_height >= ?")
 			params = append(params, doorHeight.Min)
+		} else {
+			conditions = append(conditions, "door_height >= ?")
+			params = append(params, 0)
 		}
 		if doorHeight.Max != -1 {
 			conditions = append(conditions, "door_height < ?")
 			params = append(params, doorHeight.Max)
+		} else {
+			conditions = append(conditions, "door_height < ?")
+			params = append(params, 200)
 		}
 	}
 
@@ -726,10 +762,16 @@ func searchEstates(c echo.Context) error {
 		if doorWidth.Min != -1 {
 			conditions = append(conditions, "door_width >= ?")
 			params = append(params, doorWidth.Min)
+		} else {
+			conditions = append(conditions, "door_width >= ?")
+			params = append(params, 0)
 		}
 		if doorWidth.Max != -1 {
 			conditions = append(conditions, "door_width < ?")
 			params = append(params, doorWidth.Max)
+		} else {
+			conditions = append(conditions, "door_width < ?")
+			params = append(params, 200)
 		}
 	}
 
@@ -743,10 +785,16 @@ func searchEstates(c echo.Context) error {
 		if estateRent.Min != -1 {
 			conditions = append(conditions, "rent >= ?")
 			params = append(params, estateRent.Min)
+		} else {
+			conditions = append(conditions, "rent >= ?")
+			params = append(params, 0)
 		}
 		if estateRent.Max != -1 {
 			conditions = append(conditions, "rent < ?")
 			params = append(params, estateRent.Max)
+		} else {
+			conditions = append(conditions, "rent < ?")
+			params = append(params, 200000)
 		}
 	}
 
@@ -775,7 +823,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
-	countQuery := "SELECT COUNT(*) FROM estate WHERE "
+	countQuery := "SELECT COUNT(id) FROM estate WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
@@ -799,7 +847,8 @@ func searchEstates(c echo.Context) error {
 
 	res.Estates = estates
 
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func getLowPricedEstate(c echo.Context) error {
@@ -815,7 +864,8 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+	b, _ := json.Marshal(EstateListResponse{Estates: estates})
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
@@ -894,6 +944,9 @@ func searchEstateNazotte(c echo.Context) error {
 			}
 		} else {
 			estatesInPolygon = append(estatesInPolygon, validatedEstate)
+		}
+		if len(estatesInPolygon) > NazotteLimit {
+			break
 		}
 	}
 
