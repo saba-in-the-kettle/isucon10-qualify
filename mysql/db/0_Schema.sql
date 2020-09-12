@@ -38,6 +38,7 @@ CREATE TABLE isuumo.chair
 );
 
 USE isuumo;
+CREATE INDEX search_chair ON chair (price, height, width, depth, kind, color, features);
 
 ALTER TABLE chair ADD INDEX idx_stock_price_id(stock, price, id);
 ALTER TABLE estate ADD INDEX idx_rent_id(rent, id);

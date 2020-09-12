@@ -5,3 +5,6 @@ php/
 python/
 ruby/
 rust
+
+.idea
+

@@ -410,7 +410,13 @@ func postChair(c echo.Context) error {
 func searchChairs(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+	const chairMin int64 = 0      // w, h, d の最小値は 30 だった
+	const chairMax int64 = 1000   // w, h, d の最大値は 200 だった
+	const minPrice int64 = 0      // 実際の最低価格は 1,000
+	const maxPrice int64 = 100000 // 実際の最低価格は 20,000
 
+	var priceMin = minPrice
+	var priceMax = maxPrice
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
@@ -419,15 +425,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairPrice.Min != -1 {
-			conditions = append(conditions, "price >= ?")
-			params = append(params, chairPrice.Min)
+			priceMin = chairPrice.Min
 		}
 		if chairPrice.Max != -1 {
-			conditions = append(conditions, "price < ?")
-			params = append(params, chairPrice.Max)
+			priceMax = chairPrice.Max - 1
 		}
 	}
+	conditions = append(conditions, "price BETWEEN ? AND ?")
+	params = append(params, priceMin)
+	params = append(params, priceMax)
 
+	var heightMin = chairMin
+	var heightMax = chairMax
 	if c.QueryParam("heightRangeId") != "" {
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
@@ -436,15 +445,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairHeight.Min != -1 {
-			conditions = append(conditions, "height >= ?")
-			params = append(params, chairHeight.Min)
+			heightMin = chairHeight.Min
 		}
 		if chairHeight.Max != -1 {
-			conditions = append(conditions, "height < ?")
-			params = append(params, chairHeight.Max)
+			heightMax = chairHeight.Max - 1 // height < を between に書き換えているため -1 している
 		}
 	}
+	conditions = append(conditions, "height BETWEEN ? AND ?")
+	params = append(params, heightMin)
+	params = append(params, heightMax)
 
+	var widthMin = chairMin
+	var widthMax = chairMax
 	if c.QueryParam("widthRangeId") != "" {
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
@@ -453,15 +465,18 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairWidth.Min != -1 {
-			conditions = append(conditions, "width >= ?")
-			params = append(params, chairWidth.Min)
+			widthMin = chairWidth.Min
 		}
 		if chairWidth.Max != -1 {
-			conditions = append(conditions, "width < ?")
-			params = append(params, chairWidth.Max)
+			widthMax = chairWidth.Max - 1
 		}
 	}
+	conditions = append(conditions, "width BETWEEN ? AND ?")
+	params = append(params, widthMin)
+	params = append(params, widthMax)
 
+	var depthMin = chairMin
+	var depthMax = chairMax
 	if c.QueryParam("depthRangeId") != "" {
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
@@ -470,14 +485,15 @@ func searchChairs(c echo.Context) error {
 		}
 
 		if chairDepth.Min != -1 {
-			conditions = append(conditions, "depth >= ?")
-			params = append(params, chairDepth.Min)
+			depthMin = chairDepth.Min
 		}
 		if chairDepth.Max != -1 {
-			conditions = append(conditions, "depth < ?")
-			params = append(params, chairDepth.Max)
+			depthMax = chairDepth.Max - 1
 		}
 	}
+	conditions = append(conditions, "depth BETWEEN ? AND ?")
+	params = append(params, depthMin)
+	params = append(params, depthMax)
 
 	if c.QueryParam("kind") != "" {
 		conditions = append(conditions, "kind = ?")
@@ -515,7 +531,7 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT * FROM chair WHERE "
+	searchQuery := "SELECT * FROM chair FORCE INDEX (search_chair) WHERE "
 	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
