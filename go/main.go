@@ -782,7 +782,7 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?," + geom + ", ?, ?, ?, ?, ?, ?, ?, ?),")
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?,"+geom+", ?, ?, ?, ?, ?, ?, ?, ?),")
 		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, doorWidthRange, doorHeightRange, rentRange)
 
 	}
@@ -1010,12 +1010,11 @@ func searchEstateNazotte(c echo.Context) error {
 	estatesInBoundingBox := []Estate{}
 	query := `SELECT id, latitude,longitude FROM estate WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? ORDER BY popularity DESC, id ASC`
 	err = dbEstate.Select(&estatesInBoundingBox, query, b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, b.TopLeftCorner.Longitude, b.BottomRightCorner.Longitude)
-	if err == sql.ErrNoRows {
-		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
-		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
-	} else if err != nil {
-		c.Echo().Logger.Errorf("database execution error : %v", err)
+	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
+	}
+	if len(estatesInBoundingBox) == 0 {
+		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
 	}
 
 	var ids []int64
