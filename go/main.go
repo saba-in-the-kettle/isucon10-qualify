@@ -891,9 +891,9 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	}
 
 	recoMap.mu.RLock()
-	defer recoMap.mu.RUnlock()
 
 	if value, ok := recoMap.rm[id]; ok {
+		recoMap.mu.RUnlock()
 		return c.JSON(http.StatusOK, EstateListResponse{Estates: value})
 	}
 
@@ -903,9 +903,11 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Logger().Infof("Requested chair id \"%v\" not found", id)
+			recoMap.mu.RUnlock()
 			return c.NoContent(http.StatusBadRequest)
 		}
 		c.Logger().Errorf("Database execution error : %v", err)
+		recoMap.mu.RUnlock()
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
@@ -917,13 +919,14 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	err = db.Select(&estates, query, w, h, w, d, h, w, h, d, d, w, d, h, Limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			recoMap.mu.RUnlock()
 			return c.JSON(http.StatusOK, EstateListResponse{[]Estate{}})
 		}
 		c.Logger().Errorf("Database execution error : %v", err)
+		recoMap.mu.RUnlock()
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	recoMap.mu.RUnlock()
 	recoMap.mu.Lock()
 	defer recoMap.mu.Unlock()
 
