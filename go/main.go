@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,12 +14,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/goccy/go-json"
+
+	_ "net/http/pprof"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
-	_ "net/http/pprof"
 )
 
 const Limit = 20
@@ -514,7 +516,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM chair WHERE "
-	countQuery := "SELECT COUNT(*) FROM chair WHERE "
+	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
@@ -537,8 +539,8 @@ func searchChairs(c echo.Context) error {
 	}
 
 	res.Chairs = chairs
-
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func buyChair(c echo.Context) error {
@@ -805,7 +807,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
-	countQuery := "SELECT COUNT(*) FROM estate WHERE "
+	countQuery := "SELECT COUNT(id) FROM estate WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
@@ -829,7 +831,8 @@ func searchEstates(c echo.Context) error {
 
 	res.Estates = estates
 
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func getLowPricedEstate(c echo.Context) error {
@@ -845,7 +848,8 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+	b, _ := json.Marshal(EstateListResponse{Estates: estates})
+	return c.JSONBlob(http.StatusOK, b)
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
