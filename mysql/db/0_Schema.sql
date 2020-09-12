@@ -36,3 +36,5 @@ CREATE TABLE isuumo.chair
     popularity  INTEGER         NOT NULL,
     stock       INTEGER         NOT NULL
 );
+
+CREATE INDEX search_chair ON chair (price, height, width, depth, kind, color, features);
