@@ -9,7 +9,7 @@ BIN_NAME:=isuumo
 SERVER1:=isucon-server-1
 SERVER_BINARY_DIR:=~/isuumo/webapp/go
 SERVER_MYSQL_DIR:=~/isuumo/webapp/mysql
-SERVER_URL:=localhost:10443
+SERVER_URL:=localhost:1323
 
 SLOW_LOG_PATH:=/tmp/slow.log
 NGINX_ACCESS_LOG_PATH:=/var/log/nginx/access.log
@@ -33,7 +33,7 @@ deploy:
 
 .PHONY: pprof
 pprof:
-	go tool pprof -http=":8081" -seconds=10 http://$(SERVER_URL)/debug/pprof/profile
+	go tool pprof -http=":8081" -seconds=20 http://$(SERVER_URL)/debug/pprof/profile
 
 .PHONY: pre-bench
 pre-bench:

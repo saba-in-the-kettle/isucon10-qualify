@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -13,12 +15,13 @@ import (
 	"strconv"
 	"strings"
 
+	_ "net/http/pprof"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
-	_ "net/http/pprof"
 )
 
 const Limit = 20
@@ -366,7 +369,10 @@ func postChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
+	query := &bytes.Buffer{}
+	values := make([]interface{}, 0, len(records)*13)
 	for _, row := range records {
+		//fmt.Println(row)
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
 		name := rm.NextString()
@@ -385,11 +391,13 @@ func postChair(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		_, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		if err != nil {
-			c.Logger().Errorf("failed to insert chair: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+	}
+	valueStr := query.String()
+	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+		c.Logger().Errorf("failed to insert chair: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -507,7 +515,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM chair WHERE "
-	countQuery := "SELECT COUNT(*) FROM chair WHERE "
+	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
@@ -561,7 +569,7 @@ func buyChair(c echo.Context) error {
 	defer tx.Rollback()
 
 	var chair Chair
-	err = tx.QueryRowx(" * FROM chair WHERE id = ? AND stock > 0 FOR UPDATE", id).StructScan(&chair)
+	err = tx.QueryRowx("SELECT * FROM chair WHERE id = ? AND stock > 0 FOR UPDATE", id).StructScan(&chair)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Echo().Logger.Infof("buyChair chair id \"%v\" not found", id)
@@ -664,6 +672,8 @@ func postEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx.Rollback()
+	query := &bytes.Buffer{}
+	values := make([]interface{}, 0, len(records)*12)
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
@@ -682,11 +692,14 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		_, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-		if err != nil {
-			c.Logger().Errorf("failed to insert estate: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+
+	}
+	valueStr := query.String()
+	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+		c.Logger().Errorf("failed to insert estate: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -775,7 +788,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
-	countQuery := "SELECT COUNT(*) FROM estate WHERE "
+	countQuery := "SELECT COUNT(id) FROM estate WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
