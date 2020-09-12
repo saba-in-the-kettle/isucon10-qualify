@@ -152,6 +152,54 @@ type RecordMapper struct {
 	err    error
 }
 
+func getSizeId(size int) int {
+	if size < 80 {
+		return 0
+	}
+	if size < 110 {
+		return 1
+	}
+	if size < 150 {
+		return 2
+	}
+	return 3
+}
+
+func getChairPriceId(price int) int {
+	if price < 3000 {
+		return 0
+	}
+	if price < 6000 {
+		return 1
+	}
+
+	if price < 9000 {
+		return 2
+	}
+
+	if price < 12000 {
+		return 3
+	}
+
+	if price < 15000 {
+		return 4
+	}
+	return 5
+}
+
+func getRentPriceId(price int) int {
+	if price < 50000 {
+		return 0
+	}
+	if price < 100000 {
+		return 1
+	}
+	if price < 150000 {
+		return 2
+	}
+	return 3
+}
+
 func (r *RecordMapper) next() (string, error) {
 	if r.err != nil {
 		return "", r.err
@@ -390,15 +438,19 @@ func postChair(c echo.Context) error {
 		kind := rm.NextString()
 		popularity := rm.NextInt()
 		stock := rm.NextInt()
+		heightRange := getSizeId(height)
+		widthRange := getSizeId(width)
+		depthRange := getSizeId(depth)
+		priceRange := getChairPriceId(price)
 		if err := rm.Err(); err != nil {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
-		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock, heightRange, widthRange, depthRange, priceRange)
 	}
 	valueStr := query.String()
-	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+	if _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock, height_range, width_range, depth_range, price_range) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert chair: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -665,16 +717,19 @@ func postEstate(c echo.Context) error {
 		doorWidth := rm.NextInt()
 		features := rm.NextString()
 		popularity := rm.NextInt()
+		doorWidthRange := getSizeId(doorWidth)
+		doorHeightRange := getSizeId(doorHeight)
+		rentRange := getRentPriceId(rent)
 		if err := rm.Err(); err != nil {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
-		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, doorWidthRange, doorHeightRange, rentRange)
 
 	}
 	valueStr := query.String()
-	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity, door_width_range, door_height_range, rent_range) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert estate: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
