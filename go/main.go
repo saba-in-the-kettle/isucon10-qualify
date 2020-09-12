@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-json"
 
@@ -285,7 +286,8 @@ func main() {
 	if err != nil {
 		e.Logger.Fatalf("DB connection failed : %v", err)
 	}
-	db.SetMaxOpenConns(256)
+	db.SetMaxOpenConns(32)
+	db.SetMaxIdleConns(32)
 	defer db.Close()
 
 	// Start server
@@ -723,6 +725,15 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+
+	recoMap.mu.Lock()
+	defer recoMap.mu.Unlock()
+	recoMap.rm = map[int][]Estate{}
+
+	lpMap.mu.Lock()
+	defer lpMap.mu.Unlock()
+	lpMap.lp = nil
+
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -852,7 +863,24 @@ func searchEstates(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, b)
 }
 
+var lpMap = struct {
+	lp []Estate
+	mu sync.RWMutex
+}{
+	lp: nil,
+	mu: sync.RWMutex{},
+}
+
 func getLowPricedEstate(c echo.Context) error {
+	lpMap.mu.RLock()
+
+	if lpMap.lp != nil {
+		b, _ := json.Marshal(EstateListResponse{Estates: lpMap.lp})
+		lpMap.mu.RUnlock()
+		return c.JSONBlob(http.StatusOK, b)
+	}
+	lpMap.mu.RUnlock()
+
 	estates := make([]Estate, 0, Limit)
 	query := `SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate ORDER BY rent ASC, id ASC LIMIT ?`
 	err := db.Select(&estates, query, Limit)
@@ -865,8 +893,20 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	lpMap.mu.Lock()
+	defer lpMap.mu.Unlock()
+	lpMap.lp = estates
+
 	b, _ := json.Marshal(EstateListResponse{Estates: estates})
 	return c.JSONBlob(http.StatusOK, b)
+}
+
+var recoMap = struct {
+	rm map[int][]Estate
+	mu sync.RWMutex
+}{
+	rm: map[int][]Estate{},
+	mu: sync.RWMutex{},
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
@@ -875,6 +915,14 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 		c.Logger().Infof("Invalid format searchRecommendedEstateWithChair id : %v", err)
 		return c.NoContent(http.StatusBadRequest)
 	}
+
+	recoMap.mu.RLock()
+
+	if value, ok := recoMap.rm[id]; ok {
+		recoMap.mu.RUnlock()
+		return c.JSON(http.StatusOK, EstateListResponse{Estates: value})
+	}
+	recoMap.mu.RUnlock()
 
 	chair := Chair{}
 	query := `SELECT width,height,depth FROM chair WHERE id = ? LIMIT 1`
@@ -902,6 +950,10 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	recoMap.mu.Lock()
+	defer recoMap.mu.Unlock()
+
+	recoMap.rm[id] = estates
 	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
 }
 
@@ -920,7 +972,7 @@ func searchEstateNazotte(c echo.Context) error {
 	b := coordinates.getBoundingBox()
 	estatesInBoundingBox := []Estate{}
 	query := `SELECT id, latitude,longitude FROM estate WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? ORDER BY popularity DESC, id ASC`
-	err = db.Select(&estatesInBoundingBox, query,  b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, b.TopLeftCorner.Longitude, b.BottomRightCorner.Longitude)
+	err = db.Select(&estatesInBoundingBox, query, b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, b.TopLeftCorner.Longitude, b.BottomRightCorner.Longitude)
 	if err == sql.ErrNoRows {
 		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
