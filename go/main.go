@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
+	_ "net/http/pprof"
 )
 
 const Limit = 20
@@ -247,6 +248,9 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+
+	// pprof
+	e.GET("/debug/pprof/*", echo.WrapHandler(http.DefaultServeMux))
 
 	// Initialize
 	e.POST("/initialize", initialize)
