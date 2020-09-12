@@ -372,6 +372,7 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "0_Schema.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
 		filepath.Join(sqlDir, "3_AddRange.sql"),
+		filepath.Join(sqlDir, "4_AddGeometry.sql"),
 	}
 
 	wg := sync.WaitGroup{}
@@ -729,7 +730,7 @@ func postEstate(c echo.Context) error {
 	}
 	defer tx.Rollback()
 	query := &bytes.Buffer{}
-	values := make([]interface{}, 0, len(records)*12)
+	values := make([]interface{}, 0, len(records)*13)
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
@@ -739,6 +740,7 @@ func postEstate(c echo.Context) error {
 		address := rm.NextString()
 		latitude := rm.NextFloat()
 		longitude := rm.NextFloat()
+		geom := "GeomFromText('POINT(" + fmt.Sprintf("%f", latitude) + " " + fmt.Sprintf("%f", longitude) + ")')"
 		rent := rm.NextInt()
 		doorHeight := rm.NextInt()
 		doorWidth := rm.NextInt()
@@ -751,12 +753,12 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),")
+		io.WriteString(query, "(?, ?, ?, ?, ?, ?, ?,"+geom+", ?, ?, ?, ?, ?, ?, ?, ?),")
 		values = append(values, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, doorWidthRange, doorHeightRange, rentRange)
 
 	}
 	valueStr := query.String()
-	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity, door_width_range, door_height_range, rent_range) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
+	if _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, geom, rent, door_height, door_width, features, popularity, door_width_range, door_height_range, rent_range) VALUES "+valueStr[:len(valueStr)-1], values...); err != nil {
 		c.Logger().Errorf("failed to insert estate: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -979,33 +981,26 @@ func searchEstateNazotte(c echo.Context) error {
 	estatesInBoundingBox := []Estate{}
 	query := `SELECT id, latitude,longitude FROM estate WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? ORDER BY popularity DESC, id ASC`
 	err = dbEstate.Select(&estatesInBoundingBox, query, b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, b.TopLeftCorner.Longitude, b.BottomRightCorner.Longitude)
-	if err == sql.ErrNoRows {
-
-		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
-	} else if err != nil {
-
+	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
+	}
+	if len(estatesInBoundingBox) == 0 {
+		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
+	}
+
+	var ids []int64
+	for _, estate := range estatesInBoundingBox {
+		ids = append(ids, estate.ID)
 	}
 
 	estatesInPolygon := []Estate{}
-	for _, estate := range estatesInBoundingBox {
-		validatedEstate := Estate{}
-
-		point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
-		query := fmt.Sprintf(`SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
-		err = dbEstate.Get(&validatedEstate, query, estate.ID) // ここが遅い
-		if err != nil {
-			if err == sql.ErrNoRows {
-				continue
-			} else {
-
-				return c.NoContent(http.StatusInternalServerError)
-			}
-		} else {
-			estatesInPolygon = append(estatesInPolygon, validatedEstate)
-		}
-		if len(estatesInPolygon) > NazotteLimit {
-			break
+	originQuery := fmt.Sprintf(`SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate WHERE id IN (?) AND ST_Contains(ST_PolygonFromText(%s), geom) ORDER BY popularity DESC, id ASC`, coordinates.coordinatesToText())
+	query, params, err := sqlx.In(originQuery, ids)
+	err = dbEstate.Select(&estatesInPolygon, query, params...)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
 		}
 	}
 
