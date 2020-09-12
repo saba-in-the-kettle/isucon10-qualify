@@ -367,10 +367,15 @@ func main() {
 
 func initialize(c echo.Context) error {
 	sqlDir := filepath.Join("..", "mysql", "db")
-	paths := []string{
+	paths2 := []string{
+		filepath.Join(sqlDir, "0_Schema.sql"),
+		filepath.Join(sqlDir, "2_DummyChairData.sql"),
+		filepath.Join(sqlDir, "3_AddRange.sql"),
+	}
+
+	paths3 := []string{
 		filepath.Join(sqlDir, "0_Schema.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
-		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 		filepath.Join(sqlDir, "3_AddRange.sql"),
 	}
 
@@ -378,7 +383,7 @@ func initialize(c echo.Context) error {
 	wg.Add(2)
 
 	go func() {
-		for _, p := range paths {
+		for _, p := range paths2 {
 			sqlFile, _ := filepath.Abs(p)
 			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v < %v",
 				mySQLConnectionData.Host,
@@ -395,7 +400,7 @@ func initialize(c echo.Context) error {
 	}()
 
 	go func() {
-		for _, p := range paths {
+		for _, p := range paths3 {
 			sqlFile, _ := filepath.Abs(p)
 			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v  < %v",
 				"10.161.78.103",
