@@ -38,7 +38,7 @@ pprof:
 .PHONY: pre-bench
 pre-bench:
 	ssh $(SERVER1) "truncate $(SLOW_LOG_PATH) --size 0"
-	ssh $(SERVER1) "truncate $(NGINX_ACCESS_LOG_PATH) --size 0"
+	ssh $(SERVER1) "sudo truncate $(NGINX_ACCESS_LOG_PATH) --size 0"
 
 .PHONY: alp
 alp:

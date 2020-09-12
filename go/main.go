@@ -723,10 +723,16 @@ func searchEstates(c echo.Context) error {
 		if doorHeight.Min != -1 {
 			conditions = append(conditions, "door_height >= ?")
 			params = append(params, doorHeight.Min)
+		} else {
+			conditions = append(conditions, "door_height >= ?")
+			params = append(params, 0)
 		}
 		if doorHeight.Max != -1 {
 			conditions = append(conditions, "door_height < ?")
 			params = append(params, doorHeight.Max)
+		} else {
+			conditions = append(conditions, "door_height < ?")
+			params = append(params, 200)
 		}
 	}
 
@@ -740,10 +746,16 @@ func searchEstates(c echo.Context) error {
 		if doorWidth.Min != -1 {
 			conditions = append(conditions, "door_width >= ?")
 			params = append(params, doorWidth.Min)
+		} else {
+			conditions = append(conditions, "door_width >= ?")
+			params = append(params, 0)
 		}
 		if doorWidth.Max != -1 {
 			conditions = append(conditions, "door_width < ?")
 			params = append(params, doorWidth.Max)
+		} else {
+			conditions = append(conditions, "door_width < ?")
+			params = append(params, 200)
 		}
 	}
 
@@ -757,10 +769,16 @@ func searchEstates(c echo.Context) error {
 		if estateRent.Min != -1 {
 			conditions = append(conditions, "rent >= ?")
 			params = append(params, estateRent.Min)
+		} else {
+			conditions = append(conditions, "rent >= ?")
+			params = append(params, 0)
 		}
 		if estateRent.Max != -1 {
 			conditions = append(conditions, "rent < ?")
 			params = append(params, estateRent.Max)
+		} else {
+			conditions = append(conditions, "rent < ?")
+			params = append(params, 200000)
 		}
 	}
 
