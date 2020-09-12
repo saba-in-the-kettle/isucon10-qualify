@@ -252,6 +252,7 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(customMiddleware)
 
 	// pprof
 	e.GET("/debug/pprof/*", echo.WrapHandler(http.DefaultServeMux))

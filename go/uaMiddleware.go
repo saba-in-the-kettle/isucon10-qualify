@@ -11,10 +11,19 @@ func passUserAgent(ua string) bool {
 		return true
 	}
 
-	if strings.HasPrefix(strings.ToLower(ua), "isu") {
-		return false // TODO Regex
+	uaLow := strings.ToLower(ua)
+
+	if strings.HasPrefix(uaLow, "isucon ") {
+		return true
+	}
+	if strings.Contains(uaLow, "isucon-") {
+		return true
 	}
 
+	if ua == "Go-http-client/1.1" {
+		return true
+	}
+	return false
 }
 
 func customMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
