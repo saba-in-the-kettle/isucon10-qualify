@@ -300,6 +300,7 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "0_Schema.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
+		filepath.Join(sqlDir, "3_AddRange.sql"),
 	}
 
 	for _, p := range paths {
@@ -412,33 +413,17 @@ func postChair(c echo.Context) error {
 func searchChairs(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
-	const chairMin int64 = 0      // w, h, d の最小値は 30 だった
-	const chairMax int64 = 1000   // w, h, d の最大値は 200 だった
-	const minPrice int64 = 0      // 実際の最低価格は 1,000
-	const maxPrice int64 = 100000 // 実際の最低価格は 20,000
 
-	var priceMin = minPrice
-	var priceMax = maxPrice
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-
-		if chairPrice.Min != -1 {
-			priceMin = chairPrice.Min
-		}
-		if chairPrice.Max != -1 {
-			priceMax = chairPrice.Max - 1
-		}
+		conditions = append(conditions, "price_range = ?")
+		params = append(params, chairPrice.ID)
 	}
-	conditions = append(conditions, "price BETWEEN ? AND ?")
-	params = append(params, priceMin)
-	params = append(params, priceMax)
 
-	var heightMin = chairMin
-	var heightMax = chairMax
 	if c.QueryParam("heightRangeId") != "" {
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
@@ -446,19 +431,10 @@ func searchChairs(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if chairHeight.Min != -1 {
-			heightMin = chairHeight.Min
-		}
-		if chairHeight.Max != -1 {
-			heightMax = chairHeight.Max - 1 // height < を between に書き換えているため -1 している
-		}
+		conditions = append(conditions, "height_range = ?")
+		params = append(params, chairHeight.ID)
 	}
-	conditions = append(conditions, "height BETWEEN ? AND ?")
-	params = append(params, heightMin)
-	params = append(params, heightMax)
 
-	var widthMin = chairMin
-	var widthMax = chairMax
 	if c.QueryParam("widthRangeId") != "" {
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
@@ -466,36 +442,19 @@ func searchChairs(c echo.Context) error {
 			return c.NoContent(http.StatusBadRequest)
 		}
 
-		if chairWidth.Min != -1 {
-			widthMin = chairWidth.Min
-		}
-		if chairWidth.Max != -1 {
-			widthMax = chairWidth.Max - 1
-		}
+		conditions = append(conditions, "width_range = ?")
+		params = append(params, chairWidth.ID)
 	}
-	conditions = append(conditions, "width BETWEEN ? AND ?")
-	params = append(params, widthMin)
-	params = append(params, widthMax)
 
-	var depthMin = chairMin
-	var depthMax = chairMax
 	if c.QueryParam("depthRangeId") != "" {
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-
-		if chairDepth.Min != -1 {
-			depthMin = chairDepth.Min
-		}
-		if chairDepth.Max != -1 {
-			depthMax = chairDepth.Max - 1
-		}
+		conditions = append(conditions, "depth_range = ?")
+		params = append(params, chairDepth.ID)
 	}
-	conditions = append(conditions, "depth BETWEEN ? AND ?")
-	params = append(params, depthMin)
-	params = append(params, depthMax)
 
 	if c.QueryParam("kind") != "" {
 		conditions = append(conditions, "kind = ?")
@@ -533,7 +492,7 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair FORCE INDEX (search_chair) WHERE "
+	searchQuery := "SELECT id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock FROM chair WHERE "
 	countQuery := "SELECT COUNT(id) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
@@ -948,8 +907,8 @@ func searchEstateNazotte(c echo.Context) error {
 
 	b := coordinates.getBoundingBox()
 	estatesInBoundingBox := []Estate{}
-	query := `SELECT id, latitude,longitude FROM estate WHERE latitude <= ? AND latitude >= ? AND longitude <= ? AND longitude >= ? ORDER BY popularity DESC, id ASC`
-	err = db.Select(&estatesInBoundingBox, query, b.BottomRightCorner.Latitude, b.TopLeftCorner.Latitude, b.BottomRightCorner.Longitude, b.TopLeftCorner.Longitude)
+	query := `SELECT id, latitude,longitude FROM estate WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? ORDER BY popularity DESC, id ASC`
+	err = db.Select(&estatesInBoundingBox, query,  b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, b.TopLeftCorner.Longitude, b.BottomRightCorner.Longitude)
 	if err == sql.ErrNoRows {
 		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
