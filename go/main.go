@@ -18,8 +18,6 @@ import (
 
 	"github.com/goccy/go-json"
 
-	_ "net/http/pprof"
-
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
@@ -309,7 +307,7 @@ func main() {
 	e.Use(customMiddleware)
 
 	// pprof
-	e.GET("/debug/pprof/*", echo.WrapHandler(http.DefaultServeMux))
+	//e.GET("/debug/pprof/*", echo.WrapHandler(http.DefaultServeMux))
 
 	// Initialize
 	e.POST("/initialize", initialize)
@@ -771,9 +769,9 @@ func postEstate(c echo.Context) error {
 	defer recoMap.mu.Unlock()
 	recoMap.rm = map[int][]Estate{}
 
-	lpMap.mu.Lock()
-	defer lpMap.mu.Unlock()
-	lpMap.lp = nil
+	//lpMap.mu.Lock()
+	//defer lpMap.mu.Unlock()
+	//lpMap.lp = nil
 
 	return c.NoContent(http.StatusCreated)
 }
@@ -871,23 +869,23 @@ func searchEstates(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, b)
 }
 
-var lpMap = struct {
-	lp []Estate
-	mu sync.RWMutex
-}{
-	lp: nil,
-	mu: sync.RWMutex{},
-}
+//var lpMap = struct {
+//	lp []Estate
+//	mu sync.RWMutex
+//}{
+//	lp: nil,
+//	mu: sync.RWMutex{},
+//}
 
 func getLowPricedEstate(c echo.Context) error {
-	lpMap.mu.RLock()
-
-	if lpMap.lp != nil {
-		b, _ := json.Marshal(EstateListResponse{Estates: lpMap.lp})
-		lpMap.mu.RUnlock()
-		return c.JSONBlob(http.StatusOK, b)
-	}
-	lpMap.mu.RUnlock()
+	//lpMap.mu.RLock()
+	//
+	//if lpMap.lp != nil {
+	//	b, _ := json.Marshal(EstateListResponse{Estates: lpMap.lp})
+	//	lpMap.mu.RUnlock()
+	//	return c.JSONBlob(http.StatusOK, b)
+	//}
+	//lpMap.mu.RUnlock()
 
 	estates := make([]Estate, 0, Limit)
 	query := `SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate ORDER BY rent ASC, id ASC LIMIT ?`
@@ -901,9 +899,9 @@ func getLowPricedEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	lpMap.mu.Lock()
-	defer lpMap.mu.Unlock()
-	lpMap.lp = estates
+	//lpMap.mu.Lock()
+	//defer lpMap.mu.Unlock()
+	//lpMap.lp = estates
 
 	b, _ := json.Marshal(EstateListResponse{Estates: estates})
 	return c.JSONBlob(http.StatusOK, b)
