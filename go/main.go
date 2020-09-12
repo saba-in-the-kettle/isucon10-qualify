@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-json"
 
@@ -723,6 +724,12 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+
+	recoMap = struct {
+		rm map[int][]Estate
+		mu sync.RWMutex
+	}{rm: map[int][]Estate{}, mu: sync.RWMutex{}}
+
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -869,11 +876,26 @@ func getLowPricedEstate(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, b)
 }
 
+var recoMap = struct {
+	rm map[int][]Estate
+	mu sync.RWMutex
+}{
+	rm: map[int][]Estate{},
+	mu: sync.RWMutex{},
+}
+
 func searchRecommendedEstateWithChair(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.Logger().Infof("Invalid format searchRecommendedEstateWithChair id : %v", err)
 		return c.NoContent(http.StatusBadRequest)
+	}
+
+	recoMap.mu.RLock()
+	defer recoMap.mu.RUnlock()
+
+	if value, ok := recoMap.rm[id]; ok {
+		return c.JSON(http.StatusOK, EstateListResponse{Estates: value})
 	}
 
 	chair := Chair{}
@@ -902,6 +924,11 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	recoMap.mu.RUnlock()
+	recoMap.mu.Lock()
+	defer recoMap.mu.Unlock()
+
+	recoMap.rm[id] = estates
 	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
 }
 
