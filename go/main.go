@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -870,25 +871,26 @@ func getLowPricedEstate(c echo.Context) error {
 }
 
 func searchRecommendedEstateWithChair(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.Logger().Infof("Invalid format searchRecommendedEstateWithChair id : %v", err)
+	id, err1 := strconv.Atoi(c.Param("id"))
+	if err1 != nil {
+		c.Logger().Infof("Invalid format searchRecommendedEstateWithChair id : %v", err1)
 		return c.NoContent(http.StatusBadRequest)
 	}
 
 	chair := Chair{}
-	query := `SELECT width,height,depth FROM chair WHERE id = ? LIMIT 1`
-	err = db.Get(&chair, query, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	query1 := `SELECT width,height,depth FROM chair WHERE id = ? LIMIT 1`
+	err1 = db.Get(&chair, query1, id)
+	if err1 != nil {
+		if err1 == sql.ErrNoRows {
 			c.Logger().Infof("Requested chair id \"%v\" not found", id)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		c.Logger().Errorf("Database execution error : %v", err)
+		c.Logger().Errorf("Database execution error : %v", err1)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	var estates []Estate
+	var estates1 []Estate
+	var estates2 []Estate
 	w := chair.Width
 	h := chair.Height
 	d := chair.Depth
@@ -902,17 +904,54 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	} else {
 		two = d
 	}
-	query = `SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate WHERE (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
-	err = db.Select(&estates, query, one, two, Limit)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return c.JSON(http.StatusOK, EstateListResponse{[]Estate{}})
-		}
-		c.Logger().Errorf("Database execution error : %v", err)
+	query1 = `SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate WHERE (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
+	err1 = db.Select(&estates1, query1, one, two, Limit)
+
+	query2 := `SELECT id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity FROM estate WHERE (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
+	err2 := db.Select(&estates2, query2, two, one, Limit)
+	if err1 == sql.ErrNoRows && err2 == sql.ErrNoRows {
+		return c.JSON(http.StatusOK, EstateListResponse{[]Estate{}})
+	}
+	if err1 != nil {
+		c.Logger().Errorf("Database execution error : %v", err1)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	if err2 != nil {
+		c.Logger().Errorf("Database execution error : %v", err1)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	estatesMap := map[int64]Estate{}
+	for _, estate := range estates1 {
+		estatesMap[estate.ID] = estate
+	}
+	for _, estate := range estates2 {
+		estatesMap[estate.ID] = estate
+	}
 
-	return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+	estatesSlice := make([]Estate, 0, len(estatesMap))
+	for _, estate := range estatesMap {
+		estatesSlice = append(estatesSlice, estate)
+	}
+
+	sort.Slice(estatesSlice, func(i, j int) bool {
+		if estatesSlice[i].Popularity > estatesSlice[j].Popularity {
+			return true
+		} else if estatesSlice[i].Popularity == estatesSlice[j].Popularity {
+			if estatesSlice[i].ID > estatesSlice[j].ID {
+				return true
+			} else {
+				return false
+			}
+		} else {
+			return false
+		}
+	})
+
+	if len(estatesSlice) > Limit {
+		return c.JSON(http.StatusOK, EstateListResponse{Estates: estatesSlice[:Limit]})
+	}
+
+	return c.JSON(http.StatusOK, EstateListResponse{Estates: estatesSlice})
 }
 
 func searchEstateNazotte(c echo.Context) error {

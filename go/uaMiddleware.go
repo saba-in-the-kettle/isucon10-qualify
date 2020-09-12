@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/labstack/echo"
 	"net/http"
 	"strings"
+
+	"github.com/labstack/echo"
 )
 
 func passUserAgent(ua string) bool {
@@ -23,7 +24,7 @@ func passUserAgent(ua string) bool {
 	if ua == "Go-http-client/1.1" {
 		return true
 	}
-	return false
+	return true
 }
 
 func customMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
