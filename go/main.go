@@ -725,10 +725,9 @@ func postEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	recoMap = struct {
-		rm map[int][]Estate
-		mu sync.RWMutex
-	}{rm: map[int][]Estate{}, mu: sync.RWMutex{}}
+	recoMap.mu.Lock()
+	defer recoMap.mu.Unlock()
+	recoMap.rm = map[int][]Estate{}
 
 	return c.NoContent(http.StatusCreated)
 }
