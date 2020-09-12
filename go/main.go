@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
 
@@ -342,6 +343,7 @@ func main() {
 		if err == nil {
 			break
 		}
+		time.Sleep(1 * time.Second)
 	}
 	dbChair.SetMaxOpenConns(32)
 	dbChair.SetMaxIdleConns(32)
@@ -352,6 +354,7 @@ func main() {
 		if err == nil {
 			break
 		}
+		time.Sleep(1 * time.Second)
 	}
 	dbEstate.SetMaxOpenConns(32)
 	dbEstate.SetMaxIdleConns(32)
